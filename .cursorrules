@@ -1,0 +1,137 @@
+1. Think it through.
+2. Explain your thinking.
+3. Do not do anything else than what is asked.
+4. Do not delete any code without explanation and good reason.
+5. All code, symbol names and alike must be in English.
+6. Any comments you add must be in English.
+
+Here is my current file structure:
+├── algorithms
+│   ├── sequence_model_trainer.py
+│   └── vanilla_trainer.py
+├── description.md
+├── envs
+│   ├── abstract_contact_environment.py
+│   ├── abstract_contact.py
+│   ├── __init__.py
+│   ├── neural_environment.py
+│   ├── __pycache__
+│   │   ├── abstract_contact.cpython-311.pyc
+│   │   ├── abstract_contact_environment.cpython-311.pyc
+│   │   ├── __init__.cpython-311.pyc
+│   │   └── neural_environment.cpython-311.pyc
+│   ├── rlgames_env_wrapper.py
+│   └── warp_sim_envs
+│       ├── assets
+│       ├── env_ant.py
+│       ├── env_anymal_joint_position_control.py
+│       ├── env_anymal.py
+│       ├── env_cartpole.py
+│       ├── env_cube_toss.py
+│       ├── env_franka_panda.py
+│       ├── environment.py
+│       ├── env_pendulum_with_contact.py
+│       ├── __init__.py
+│       ├── __pycache__
+│       ├── utils.py
+│       └── wrapper_utils.py
+├── eval
+│   ├── eval_passive
+│   │   └── eval_passive_motion.py
+│   └── eval_rl
+│       ├── batch_eval_policy.py
+│       ├── cfg
+│       ├── eval_cfg
+│       └── run_rl.py
+├── figures
+│   └── overview.png
+├── generate
+│   ├── generate_dataset_ant.py
+│   ├── generate_dataset_anymal.py
+│   ├── generate_dataset_contact_free.py
+│   ├── generate_dataset_cube_toss.py
+│   ├── generate_dataset_pendulum.py
+│   ├── __pycache__
+│   │   ├── simulation_sampler.cpython-311.pyc
+│   │   └── trajectory_sampler.cpython-311.pyc
+│   ├── simulation_sampler.py
+│   ├── trajectory_sampler_ant.py
+│   ├── trajectory_sampler_anymal.py
+│   ├── trajectory_sampler_pendulum.py
+│   ├── trajectory_sampler.py
+│   └── visualize_dataset.py
+├── integrators
+│   ├── integrator_neural.py
+│   ├── integrator_neural_rnn.py
+│   ├── integrator_neural_stateful.py
+│   ├── integrator_neural_transformer.py
+│   └── __pycache__
+│       ├── integrator_neural.cpython-311.pyc
+│       ├── integrator_neural_rnn.cpython-311.pyc
+│       ├── integrator_neural_stateful.cpython-311.pyc
+│       └── integrator_neural_transformer.cpython-311.pyc
+├── LICENSE.md
+├── models
+│   ├── base_models.py
+│   ├── distributions.py
+│   ├── models.py
+│   ├── model_transformer.py
+│   ├── model_utils.py
+│   └── __pycache__
+│       ├── base_models.cpython-311.pyc
+│       ├── models.cpython-311.pyc
+│       ├── model_transformer.cpython-311.pyc
+│       └── model_utils.cpython-311.pyc
+├── nerdPaper.pdf
+├── playground
+│   ├── Pendulum
+│   │   ├── pendulum_comparison.png
+│   │   ├── PendulumSimulComparison.py
+│   │   ├── PendulumSimulNerd.py
+│   │   └── PendulumSimul.py
+│   └── templateSimulNerd.py
+├── pretrained_models
+│   ├── NeRD_models
+│   │   ├── Ant
+│   │   ├── Anymal
+│   │   ├── Cartpole
+│   │   ├── Franka
+│   │   └── Pendulum
+│   └── RL_policies
+│       ├── Ant
+│       ├── Anymal
+│       ├── Cartpole
+│       └── Franka
+├── README.md
+├── requirements.txt
+├── train
+│   ├── arguments.py
+│   ├── cfg
+│   │   ├── Ant
+│   │   ├── Anymal
+│   │   ├── Cartpole
+│   │   ├── FrankaReach
+│   │   └── Pendulum
+│   └── train.py
+└── utils
+    ├── commons.py
+    ├── datasets.py
+    ├── env_utils.py
+    ├── evaluator.py
+    ├── logger.py
+    ├── __pycache__
+    │   ├── commons.cpython-311.pyc
+    │   ├── datasets.cpython-311.pyc
+    │   ├── env_utils.cpython-311.pyc
+    │   ├── evaluator.cpython-311.pyc
+    │   ├── python_utils.cpython-311.pyc
+    │   ├── running_mean_std.cpython-311.pyc
+    │   ├── time_report.cpython-311.pyc
+    │   ├── torch_utils.cpython-311.pyc
+    │   └── warp_utils.cpython-311.pyc
+    ├── python_utils.py
+    ├── running_mean_std.py
+    ├── time_report.py
+    ├── torch_utils.py
+    ├── visualize_env.py
+    └── warp_utils.py

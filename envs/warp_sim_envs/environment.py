@@ -271,7 +271,8 @@ class Environment:
         use_graph_capture: bool = None,
         use_tiled_rendering: bool = None,
         setup_renderer: bool = True,
-        contact_free: bool = False
+        contact_free: bool = False,
+        custom_articulation_builder: wp.sim.ModelBuilder = None
     ):
         if num_envs is not None:
             self.num_envs = num_envs
@@ -316,10 +317,15 @@ class Environment:
             self.env_offsets, dtype=wp.vec3, device=self.device
         )
         try:
-            articulation_builder = wp.sim.ModelBuilder(
-                up_vector=up_vector, gravity=self.gravity
-            )
-            self.create_articulation(articulation_builder)
+            # Use custom articulation builder if provided, otherwise create a new one
+            if custom_articulation_builder is not None:
+                articulation_builder = custom_articulation_builder
+            else:
+                articulation_builder = wp.sim.ModelBuilder(
+                    up_vector=up_vector, gravity=self.gravity
+                )
+                self.create_articulation(articulation_builder)
+            
             for i in trange(
                 self.num_envs, desc=f"Creating {self.num_envs} environments"
             ):
@@ -361,6 +367,7 @@ class Environment:
                 self.featherstone_settings["update_mass_matrix_every"] = (
                     self.sim_substeps
                 )
+            print("--------------------------Calling FeatherStone-----------------------------")
             self.integrator = wp.sim.FeatherstoneIntegrator(
                 self.model, **self.featherstone_settings
             )
