@@ -23,6 +23,7 @@ Simple script to test NeRD model with PendulumWithContactEnvironment.
 """
 import sys
 import os
+from pathlib import Path
 base_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../'))
 sys.path.append(base_dir)
 
@@ -36,13 +37,113 @@ from envs.neural_environment import NeuralEnvironment
 from utils.torch_utils import num_params_torch_model
 from utils.python_utils import set_random_seed
 from envs.warp_sim_envs.utils import update_ground_plane
+from playground.analysis_utils import write_state_to_csv
+
+def create_custom_pendulum_builder():
+    """
+    Creates a custom double pendulum ModelBuilder.
+    This is a custom implementation that can be modified to change
+    the pendulum structure (chain length, link dimensions, etc.)
+    """
+    # Custom pendulum parameters
+    chain_length = 2
+    chain_width = 1.5  # Link length
+    link_radius = 0.1
+    link_density = 500.0
+    
+    # Joint limits
+    joint_limit_lower = -2 * np.pi
+    joint_limit_upper = 2 * np.pi
+    limit_ke = 0.0
+    limit_kd = 0.0
+    
+    # Contact properties
+    shape_ke = 1.0e4
+    shape_kd = 1.0e3
+    shape_kf = 1.0e4
+    
+    # Create ModelBuilder with up_vector and gravity
+    # Note: up_vector and gravity will be set by Environment, but we set them here for consistency
+    up_vector = np.array([0.0, 1.0, 0.0])  # Y-axis up
+    gravity = -9.81
+    articulation_builder = wp.sim.ModelBuilder(up_vector=up_vector, gravity=gravity)
+    
+    # Set ground plane
+    articulation_builder.set_ground_plane(
+        ke=shape_ke,
+        kd=shape_kd,
+        kf=shape_kf,
+    )
+    
+    # Create pendulum links
+    for i in range(chain_length):
+        if i == 0:
+            # First link: connected to world
+            parent = -1
+            parent_joint_xform = wp.transform([0.0, 2.0, 1.0], wp.quat_identity())
+        else:
+            # Subsequent links: connected to previous link
+            parent = articulation_builder.joint_count - 1
+            parent_joint_xform = wp.transform(
+                [chain_width, 0.0, 0.0], wp.quat_identity()
+            )
+        
+        # Create body
+        body = articulation_builder.add_body(
+            origin=wp.transform([i, 0.0, 1.0], wp.quat_identity()),
+            armature=0.1
+        )
+        
+        # Create capsule shape for the link
+        articulation_builder.add_shape_capsule(
+            pos=(chain_width * 0.5, 0.0, 0.0),
+            half_height=chain_width * 0.5,
+            radius=link_radius,
+            up_axis=0,  # X-axis aligned
+            density=link_density,
+            body=body,
+            ke=shape_ke,
+            kd=shape_kd,
+            kf=shape_kf,
+        )
+        
+        # Create revolute joint
+        articulation_builder.add_joint_revolute(
+            parent=parent,
+            child=body,
+            axis=(0.0, 0.0, 1.0),  # Rotate around Z-axis
+            parent_xform=parent_joint_xform,
+            limit_lower=joint_limit_lower,
+            limit_upper=joint_limit_upper,
+            limit_ke=limit_ke,
+            limit_kd=limit_kd,
+        )
+    
+    # Set initial joint positions
+    articulation_builder.joint_q[:] = [0.0, 0.0]
+    
+    # Configure ground plane for contact (using contact config 0: contact-free)
+    # This can be modified to enable different contact configurations
+    ground_offset = -15.5  # Contact-free configuration
+    ground_rot_xyz = np.array([0., 0., 0.])
+    ground_rot = Rotation.from_euler('xyz', ground_rot_xyz).as_quat()
+    update_ground_plane(
+        articulation_builder,
+        pos=[0.0, ground_offset, 0.0],
+        rot=ground_rot,
+        ke=shape_ke,
+        kd=shape_kd,
+        kf=shape_kf,
+    )
+    
+    return articulation_builder
 
 if __name__ == '__main__':
     # Configuration
     device = 'cuda:0'
     model_path = os.path.join(base_dir, 'pretrained_models/NeRD_models/Pendulum/model/nn/model.pt')
     num_envs = 1
-    num_steps = 5000
+    num_steps = 3000
     seed = 42
     
     set_random_seed(seed)
@@ -63,104 +164,6 @@ if __name__ == '__main__':
     
     # Create custom double pendulum ModelBuilder
     print("Creating custom double pendulum ModelBuilder...")
-    def create_custom_pendulum_builder():
-        """
-        Creates a custom double pendulum ModelBuilder.
-        This is a custom implementation that can be modified to change
-        the pendulum structure (chain length, link dimensions, etc.)
-        """
-        # Custom pendulum parameters
-        chain_length = 2
-        chain_width = 1.5  # Link length
-        link_radius = 0.1
-        link_density = 500.0
-        
-        # Joint limits
-        joint_limit_lower = -2 * np.pi
-        joint_limit_upper = 2 * np.pi
-        limit_ke = 0.0
-        limit_kd = 0.0
-        
-        # Contact properties
-        shape_ke = 1.0e4
-        shape_kd = 1.0e3
-        shape_kf = 1.0e4
-        
-        # Create ModelBuilder with up_vector and gravity
-        # Note: up_vector and gravity will be set by Environment, but we set them here for consistency
-        up_vector = np.array([0.0, 1.0, 0.0])  # Y-axis up
-        gravity = -9.81
-        articulation_builder = wp.sim.ModelBuilder(up_vector=up_vector, gravity=gravity)
-        
-        # Set ground plane
-        articulation_builder.set_ground_plane(
-            ke=shape_ke,
-            kd=shape_kd,
-            kf=shape_kf,
-        )
-        
-        # Create pendulum links
-        for i in range(chain_length):
-            if i == 0:
-                # First link: connected to world
-                parent = -1
-                parent_joint_xform = wp.transform([0.0, 2.0, 1.0], wp.quat_identity())
-            else:
-                # Subsequent links: connected to previous link
-                parent = articulation_builder.joint_count - 1
-                parent_joint_xform = wp.transform(
-                    [chain_width, 0.0, 0.0], wp.quat_identity()
-                )
-            
-            # Create body
-            body = articulation_builder.add_body(
-                origin=wp.transform([i, 0.0, 1.0], wp.quat_identity()),
-                armature=0.1
-            )
-            
-            # Create capsule shape for the link
-            articulation_builder.add_shape_capsule(
-                pos=(chain_width * 0.5, 0.0, 0.0),
-                half_height=chain_width * 0.5,
-                radius=link_radius,
-                up_axis=0,  # X-axis aligned
-                density=link_density,
-                body=body,
-                ke=shape_ke,
-                kd=shape_kd,
-                kf=shape_kf,
-            )
-            
-            # Create revolute joint
-            articulation_builder.add_joint_revolute(
-                parent=parent,
-                child=body,
-                axis=(0.0, 0.0, 1.0),  # Rotate around Z-axis
-                parent_xform=parent_joint_xform,
-                limit_lower=joint_limit_lower,
-                limit_upper=joint_limit_upper,
-                limit_ke=limit_ke,
-                limit_kd=limit_kd,
-            )
-        
-        # Set initial joint positions
-        articulation_builder.joint_q[:] = [0.0, 0.0]
-        
-        # Configure ground plane for contact (using contact config 0: contact-free)
-        # This can be modified to enable different contact configurations
-        ground_offset = -15.5  # Contact-free configuration
-        ground_rot_xyz = np.array([0., 0., 0.])
-        ground_rot = Rotation.from_euler('xyz', ground_rot_xyz).as_quat()
-        update_ground_plane(
-            articulation_builder,
-            pos=[0.0, ground_offset, 0.0],
-            rot=ground_rot,
-            ke=shape_ke,
-            kd=shape_kd,
-            kf=shape_kf,
-        )
-        
-        return articulation_builder
     
     # Create the custom articulation builder
     custom_articulation_builder = create_custom_pendulum_builder()
@@ -199,13 +202,13 @@ if __name__ == '__main__':
     
     # Set initial joint angles (in radians)
     # First joint: 45 degrees, Second joint: -30 degrees
-    initial_states[0, 0] = np.deg2rad(-90)   # θ1 = 45°
-    initial_states[0, 1] = np.deg2rad(-90)  # θ2 = -30°
+    initial_states[0, 0] = np.deg2rad(0) #np.deg2rad(-90)   # θ1 = 45°
+    initial_states[0, 1] = np.deg2rad(0) #np.deg2rad(0)  # θ2 = -30°
     
     # Set initial joint velocities (in rad/s)
     # Give some initial angular velocities for more interesting motion
-    initial_states[0, 2] = 1.0   # θ̇1 = 1.0 rad/s
-    initial_states[0, 3] = -0.5  # θ̇2 = -0.5 rad/s
+    initial_states[0, 2] = 0.0   # θ̇1 = 1.0 rad/s
+    initial_states[0, 3] = 0.0  # θ̇2 = -0.5 rad/s
     
     print(f"Initial state:")
     print(f"  θ1 = {np.rad2deg(initial_states[0, 0].item()):.2f}°")
@@ -215,6 +218,10 @@ if __name__ == '__main__':
     
     # Reset environment with initial states
     neural_env.reset(initial_states=initial_states)
+    
+    # Setup CSV file for logging state vectors
+    csv_filename = Path(__file__).parent / 'pendulum_states.csv'
+    print(f"\nWriting state vectors to: {csv_filename}")
     
     # Run simulation loop
     print(f"\nRunning simulation for {num_steps} steps...")
@@ -227,6 +234,9 @@ if __name__ == '__main__':
         for step in range(num_steps):
             # Step forward with zero actions (passive motion)
             states = neural_env.step(zero_actions, env_mode='neural')
+            
+            # Write state vector to CSV file
+            write_state_to_csv(csv_filename, step, states)
             
             # Render the simulation
             neural_env.render()
@@ -242,5 +252,6 @@ if __name__ == '__main__':
         print("\nSimulation interrupted by user.")
     
     print("Simulation completed.")
+    print(f"State data saved to: {csv_filename}")
     neural_env.close()
 
