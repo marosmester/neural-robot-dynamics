@@ -66,6 +66,7 @@ Example usage:
 import torch
 import numpy as np
 from typing import Dict, Optional, Union
+from collections import deque
 
 from .models.models import ModelMixedInput
 from .integrators.state_processor import (
@@ -133,6 +134,7 @@ class NeRDPredictor:
             'orientation_prediction_parameterization', 'quaternion'
         )
         self.states_embedding_type = self.neural_integrator_cfg.get('states_embedding_type', None)
+        self.num_states_history = self.neural_integrator_cfg.get('num_states_history', 1)
         
         # Robot configuration
         if dof_q_per_env is None:
@@ -176,6 +178,15 @@ class NeRDPredictor:
             self.state_embedding_dim = self.state_dim + self.is_angular_dof.sum()
         else:
             raise NotImplementedError(f"Unknown states_embedding_type: {self.states_embedding_type}")
+        
+        # Initialize history buffer for sequence models (T > 1)
+        self.states_history = deque(maxlen=self.num_states_history)
+    
+    def reset(self):
+        """
+        Reset the history buffer (call at start of new trajectory/episode).
+        """
+        self.states_history.clear()
     
     def predict(
         self,
@@ -221,27 +232,55 @@ class NeRDPredictor:
             contacts['contact_thicknesses']
         )
         
-        # Assemble model inputs
-        model_inputs = {
-            "root_body_q": root_body_q.unsqueeze(1),  # (num_envs, 1, 7)
-            "states": states.unsqueeze(1),  # (num_envs, 1, state_dim)
-            "joint_acts": joint_acts.unsqueeze(1),  # (num_envs, 1, joint_act_dim)
-            "gravity_dir": gravity_dir.unsqueeze(1),  # (num_envs, 1, 3)
-            "contact_normals": contacts['contact_normals'].unsqueeze(1),  # (num_envs, 1, num_contacts * 3)
-            "contact_depths": contacts['contact_depths'].unsqueeze(1),  # (num_envs, 1, num_contacts)
-            "contact_thicknesses": contacts['contact_thicknesses'].unsqueeze(1),  # (num_envs, 1, num_contacts)
-            "contact_points_0": contacts['contact_points_0'].unsqueeze(1),  # (num_envs, 1, num_contacts * 3)
-            "contact_points_1": contacts['contact_points_1'].unsqueeze(1),  # (num_envs, 1, num_contacts * 3)
-            "contact_masks": contact_masks.unsqueeze(1),  # (num_envs, 1, num_contacts)
+        # Add current state to history BEFORE prediction
+        history_entry = {
+            "root_body_q": root_body_q.clone(),
+            "states": states.clone(),
+            "joint_acts": joint_acts.clone(),
+            "gravity_dir": gravity_dir.clone(),
+            "contact_normals": contacts['contact_normals'].clone(),
+            "contact_depths": contacts['contact_depths'].clone(),
+            "contact_thicknesses": contacts['contact_thicknesses'].clone(),
+            "contact_points_0": contacts['contact_points_0'].clone(),
+            "contact_points_1": contacts['contact_points_1'].clone(),
+            "contact_masks": contact_masks.clone(),
         }
+        self.states_history.append(history_entry)
+        
+        # Assemble model inputs from history
+        if len(self.states_history) == 0:
+            # Fallback (shouldn't happen, but safety check)
+            model_inputs = {
+                "root_body_q": root_body_q.unsqueeze(1),  # (num_envs, 1, 7)
+                "states": states.unsqueeze(1),  # (num_envs, 1, state_dim)
+                "joint_acts": joint_acts.unsqueeze(1),  # (num_envs, 1, joint_act_dim)
+                "gravity_dir": gravity_dir.unsqueeze(1),  # (num_envs, 1, 3)
+                "contact_normals": contacts['contact_normals'].unsqueeze(1),  # (num_envs, 1, num_contacts * 3)
+                "contact_depths": contacts['contact_depths'].unsqueeze(1),  # (num_envs, 1, num_contacts)
+                "contact_thicknesses": contacts['contact_thicknesses'].unsqueeze(1),  # (num_envs, 1, num_contacts)
+                "contact_points_0": contacts['contact_points_0'].unsqueeze(1),  # (num_envs, 1, num_contacts * 3)
+                "contact_points_1": contacts['contact_points_1'].unsqueeze(1),  # (num_envs, 1, num_contacts * 3)
+                "contact_masks": contact_masks.unsqueeze(1),  # (num_envs, 1, num_contacts)
+            }
+        else:
+            # Collate history into tensors: list of dicts -> dict of tensors
+            # Stack all history entries: list of (num_envs, dim) -> (num_envs, T, dim)
+            model_inputs = {}
+            for key in self.states_history[0].keys():
+                stacked = torch.stack([entry[key] for entry in self.states_history], dim=1)
+                model_inputs[key] = stacked  # (num_envs, T, dim)
         
         # Process inputs (coordinate frame conversion, state embedding, contact masking)
         model_inputs = self._process_inputs(model_inputs)
         
         # Run model inference
         with torch.no_grad():
-            prediction = self.model.evaluate(model_inputs)  # (num_envs, 1, pred_dim)
-            prediction = prediction.squeeze(1)  # (num_envs, pred_dim)
+            prediction = self.model.evaluate(model_inputs)  # (num_envs, T, pred_dim) or (num_envs, 1, pred_dim)
+            # Take prediction from last timestep
+            if prediction.shape[1] > 1:
+                prediction = prediction[:, -1, :]  # (num_envs, pred_dim)
+            else:
+                prediction = prediction.squeeze(1)  # (num_envs, pred_dim)
         
         # Convert prediction to next states
         cur_states = model_inputs["states"][:, -1, :]  # (num_envs, state_dim)

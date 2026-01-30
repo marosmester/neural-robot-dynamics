@@ -6,3 +6,5 @@ __pycache__/
 *.zip
 *.usd
 *.usda
+*.pdf
+*.csv

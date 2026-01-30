@@ -33,6 +33,7 @@ class RNNNeuralIntegrator(NeuralIntegrator):
         super().__init__(**kwargs)
     
     def reset(self):
+        super().reset()  # Reset step counter for logging
         self._step_count = 0
         self.neural_model.init_rnn(self.num_envs)
     

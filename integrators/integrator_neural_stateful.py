@@ -69,6 +69,7 @@ class StatefulNeuralIntegrator(NeuralIntegrator):
                 })
     
     def reset(self):
+        super().reset()  # Reset step counter for logging
         self.reset_states_history()
     
     def _update_states(self, model: Model, warp_states: State, joint_act):

@@ -33,6 +33,12 @@ import torch
 
 from typing import Optional
 
+# Import logging function (with try-except to handle cases where playground is not in path)
+try:
+    from playground.analysis_utils import write_model_inputs_to_csv
+except ImportError:
+    write_model_inputs_to_csv = None
+
 @wp.kernel
 def determine_angular_dofs(
     joint_type: wp.array(dtype=int),
@@ -140,7 +146,8 @@ class NeuralIntegrator(Integrator):
         anchor_frame_step: Optional[str] = 'every',
         states_embedding_type: Optional[str] = None,
         prediction_type: str = "relative",
-        orientation_prediction_parameterization: str = "quaternion"
+        orientation_prediction_parameterization: str = "quaternion",
+        log_inputs_path: Optional[str] = None
     ):
         """
         Args:
@@ -233,6 +240,10 @@ class NeuralIntegrator(Integrator):
         self.orientation_prediction_parameterization = orientation_prediction_parameterization
         
         self._init_prediction()
+        
+        # Initialize logging if enabled
+        self.log_inputs_path = log_inputs_path
+        self._simulation_step = 0
     
     def _build_dof_types(self):
         # compute information about the joint dofs
@@ -321,7 +332,9 @@ class NeuralIntegrator(Integrator):
             self.neural_model.init_rnn(batch_size)
 
     def reset(self):
-        pass
+        # Reset simulation step counter for logging
+        if hasattr(self, 'log_inputs_path') and self.log_inputs_path is not None:
+            self._simulation_step = 0
     
     def before_model_forward(self):
         pass
@@ -355,6 +368,10 @@ class NeuralIntegrator(Integrator):
             # get the inputs for neural model
             model_inputs = self.get_neural_model_inputs()
             
+            # Log model inputs if logging is enabled
+            if self.log_inputs_path is not None and write_model_inputs_to_csv is not None:
+                write_model_inputs_to_csv(self.log_inputs_path, self._simulation_step, model_inputs)
+            
             # compute the prediction using neural model, shape (num_envs, 1, dim)
             prediction = self.neural_model.evaluate(model_inputs)
             
@@ -373,6 +390,10 @@ class NeuralIntegrator(Integrator):
             self.wrap2PI(next_states_world)
 
             self.assign_states_from_torch(state_out, next_states_world)
+            
+            # Increment simulation step counter for logging
+            if self.log_inputs_path is not None:
+                self._simulation_step += 1
         
         # update maximal coordinates
         warp_utils.eval_fk(model, state_out)

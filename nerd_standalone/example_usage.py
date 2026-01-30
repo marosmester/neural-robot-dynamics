@@ -103,7 +103,7 @@ def create_example_inputs(num_envs=1, device='cuda:0'):
     num_contacts = 1
     contacts = {
         'contact_normals': torch.zeros((num_envs, num_contacts * 3), device=device),
-        'contact_depths': torch.ones((num_envs, num_contacts), device=device) * 10000.0,  # No contact (large depth)
+        'contact_depths': torch.ones((num_envs, num_convert_states_w2bcontacts), device=device) * 10000.0,  # No contact (large depth)
         'contact_thicknesses': torch.ones((num_envs, num_contacts), device=device) * 0.01,
         'contact_points_0': torch.zeros((num_envs, num_contacts * 3), device=device),
         'contact_points_1': torch.zeros((num_envs, num_contacts * 3), device=device),

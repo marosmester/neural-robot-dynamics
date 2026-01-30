@@ -37,7 +37,11 @@ from envs.neural_environment import NeuralEnvironment
 from utils.torch_utils import num_params_torch_model
 from utils.python_utils import set_random_seed
 from envs.warp_sim_envs.utils import update_ground_plane
-from playground.analysis_utils import write_state_to_csv
+from playground.analysis_utils import write_state_to_csv, write_contact_inputs_to_csv
+
+# Ground contact config: same options as envs/warp_sim_envs/env_pendulum_with_contact.py CONTACT_CONFIG.
+# 0 = contact-free (ground far below). 1-6 = ground contact (1=horizontal, 2&6=inclined).
+CONTACT_CONFIG = 1
 
 def create_custom_pendulum_builder():
     """
@@ -122,14 +126,34 @@ def create_custom_pendulum_builder():
     # Set initial joint positions
     articulation_builder.joint_q[:] = [0.0, 0.0]
     
-    # Configure ground plane for contact (using contact config 0: contact-free)
-    # This can be modified to enable different contact configurations
-    ground_offset = -15.5  # Contact-free configuration
-    ground_rot_xyz = np.array([0., 0., 0.])
-    ground_rot = Rotation.from_euler('xyz', ground_rot_xyz).as_quat()
+    # Ground plane: same 7 configs as env_pendulum_with_contact.py (CONTACT_CONFIG 0-6)
+    if CONTACT_CONFIG == 0:
+        offset = -15.5
+        rot_xyz = np.array([0., 0., 0.])
+    elif CONTACT_CONFIG == 1:
+        offset = 0.0
+        rot_xyz = np.array([0., 0., 0.])
+    elif CONTACT_CONFIG == 2:
+        offset = 0.2
+        rot_xyz = np.array([np.pi / 8., np.pi / 16., np.pi / 16.])
+    elif CONTACT_CONFIG == 3:
+        offset = 0.5
+        rot_xyz = np.array([0., 0., 0.])
+    elif CONTACT_CONFIG == 4:
+        offset = -0.5
+        rot_xyz = np.array([0., 0., 0.])
+    elif CONTACT_CONFIG == 5:
+        offset = -0.3
+        rot_xyz = np.array([0., 0., 0.])
+    elif CONTACT_CONFIG == 6:
+        offset = 0.0
+        rot_xyz = np.array([np.pi / 8., 0., 0.])
+    else:
+        raise ValueError(f"Invalid CONTACT_CONFIG: {CONTACT_CONFIG}. Use 0-6 (see env_pendulum_with_contact.py).")
+    ground_rot = Rotation.from_euler('xyz', rot_xyz).as_quat()
     update_ground_plane(
         articulation_builder,
-        pos=[0.0, ground_offset, 0.0],
+        pos=[0.0, offset, 0.0],
         rot=ground_rot,
         ke=shape_ke,
         kd=shape_kd,
@@ -143,7 +167,7 @@ if __name__ == '__main__':
     device = 'cuda:0'
     model_path = os.path.join(base_dir, 'pretrained_models/NeRD_models/Pendulum/model/nn/model.pt')
     num_envs = 1
-    num_steps = 3000
+    num_steps = 1000
     seed = 42
     
     set_random_seed(seed)
@@ -219,9 +243,11 @@ if __name__ == '__main__':
     # Reset environment with initial states
     neural_env.reset(initial_states=initial_states)
     
-    # Setup CSV file for logging state vectors
-    csv_filename = Path(__file__).parent / 'pendulum_states.csv'
+    # Setup CSV files for logging state vectors and contact info
+    csv_filename = Path(__file__).parent / 'pendulum_states_2.csv'
+    contact_csv_filename = Path(__file__).parent / 'pendulum_contact_inputs.csv'
     print(f"\nWriting state vectors to: {csv_filename}")
+    print(f"Writing contact info to: {contact_csv_filename}")
     
     # Run simulation loop
     print(f"\nRunning simulation for {num_steps} steps...")
@@ -232,11 +258,13 @@ if __name__ == '__main__':
     
     try:
         for step in range(num_steps):
+            # Get model inputs (including contact info) before step so we log inputs used for this step
+            model_inputs = neural_env.integrator_neural.get_neural_model_inputs()
             # Step forward with zero actions (passive motion)
             states = neural_env.step(zero_actions, env_mode='neural')
-            
-            # Write state vector to CSV file
+            # Write state vector and contact-related inputs to CSV files
             write_state_to_csv(csv_filename, step, states)
+            write_contact_inputs_to_csv(contact_csv_filename, step, model_inputs)
             
             # Render the simulation
             neural_env.render()
@@ -253,5 +281,6 @@ if __name__ == '__main__':
     
     print("Simulation completed.")
     print(f"State data saved to: {csv_filename}")
+    print(f"Contact data saved to: {contact_csv_filename}")
     neural_env.close()
 
