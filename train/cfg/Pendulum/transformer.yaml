@@ -24,10 +24,10 @@ algorithm:
     lr_schedule: linear
 
   dataset:
-    train_dataset_path: PATH/TO/TRAIN_DATASET.hdf5
+    train_dataset_path: data/datasets/PendulumWithContact/pendulumValid10kseed0.hdf5
     valid_datasets: 
-      exp_trajectory: PATH/TO/VALID_DATASET_1.hdf5
-      fixed_ground_passive: PATH/TO/VALID_DATASET_2.hdf5
+      exp_trajectory: data/datasets/PendulumWithContact/pendulumValid100kseed1.hdf5
+      fixed_ground_passive: data/datasets/PendulumWithContact/pendulumValid100kseed1.hdf5
     max_capacity: 100000000
     num_data_workers: 4
   
@@ -35,7 +35,7 @@ algorithm:
     mode: dataset
     rollout_horizon: 10
     num_rollouts: 2048
-    dataset_path: PATH/TO/VALID_PASSIVE_DATASET.hdf5
+    dataset_path: data/datasets/PendulumWithContact/pendulumValid100kseed1.hdf5
     passive: True
 
 inputs:

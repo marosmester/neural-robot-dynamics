@@ -210,12 +210,15 @@ class VanillaTrainer:
                         )
     
     def get_datasets(self, train_dataset_path, valid_datasets_cfg):
-        self.train_dataset = BatchTransitionDataset(
-                                batch_size = self.batch_size,
-                                hdf5_dataset_path = train_dataset_path,
-                                max_capacity = self.dataset_max_capacity,
-                                device = self.device
-                            )
+        if train_dataset_path is not None:
+            self.train_dataset = BatchTransitionDataset(
+                                    batch_size = self.batch_size,
+                                    hdf5_dataset_path = train_dataset_path,
+                                    max_capacity = self.dataset_max_capacity,
+                                    device = self.device
+                                )
+        else:
+            self.train_dataset = None
 
         valid_dataset_names = valid_datasets_cfg.keys()
         for valid_dataset_name in valid_dataset_names:
@@ -700,8 +703,7 @@ class VanillaTrainer:
                             dataloader = valid_loaders[valid_dataset_name],
                             dataloader_iter = valid_loader_iters[valid_dataset_name], 
                             num_batches = num_valid_batches,
-                            shuffle = False,
-                            info = valid_dataset_name)
+                            shuffle = False)
             print_info("Valid dataset [{}]: loss = {:.8f}, itemized = {}".format(
                 valid_dataset_name, 
                 avg_valid_losses[valid_dataset_name],
@@ -711,14 +713,13 @@ class VanillaTrainer:
         # Rollout Eval
         print('Evaluating')
         num_eval_rollouts = self.num_eval_rollouts
-        eval_error, _ = self.evaluator.evaluate_action_mode(
+        eval_error, _, error_stats = self.evaluator.evaluate_action_mode(
             num_traj = num_eval_rollouts,
             eval_mode = 'rollout',
             env_mode = 'neural',
             trajectory_source = self.eval_mode,
             render = self.eval_render,
-            passive = self.eval_passive,
-            silent = True
+            passive = self.eval_passive
         )
         
         # Logging

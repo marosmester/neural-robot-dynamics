@@ -37,11 +37,17 @@ from envs.neural_environment import NeuralEnvironment
 from utils.torch_utils import num_params_torch_model
 from utils.python_utils import set_random_seed
 from envs.warp_sim_envs.utils import update_ground_plane
-from playground.analysis_utils import write_state_to_csv, write_contact_inputs_to_csv
+from playground.analysis_utils import (
+    write_state_to_csv,
+    write_contact_inputs_to_csv,
+    write_root_body_q_to_csv,
+)
 
 # Ground contact config: same options as envs/warp_sim_envs/env_pendulum_with_contact.py CONTACT_CONFIG.
 # 0 = contact-free (ground far below). 1-6 = ground contact (1=horizontal, 2&6=inclined).
 CONTACT_CONFIG = 1
+PENDULUM_Z_COORD = 0.0
+
 
 def create_custom_pendulum_builder():
     """
@@ -84,7 +90,7 @@ def create_custom_pendulum_builder():
         if i == 0:
             # First link: connected to world
             parent = -1
-            parent_joint_xform = wp.transform([0.0, 2.0, 1.0], wp.quat_identity())
+            parent_joint_xform = wp.transform([0.0, 2.0, PENDULUM_Z_COORD], wp.quat_identity())
         else:
             # Subsequent links: connected to previous link
             parent = articulation_builder.joint_count - 1
@@ -94,7 +100,7 @@ def create_custom_pendulum_builder():
         
         # Create body
         body = articulation_builder.add_body(
-            origin=wp.transform([i, 0.0, 1.0], wp.quat_identity()),
+            origin=wp.transform([i, 0.0, PENDULUM_Z_COORD], wp.quat_identity()),
             armature=0.1
         )
         
@@ -126,28 +132,30 @@ def create_custom_pendulum_builder():
     # Set initial joint positions
     articulation_builder.joint_q[:] = [0.0, 0.0]
     
-    # Ground plane: same 7 configs as env_pendulum_with_contact.py (CONTACT_CONFIG 0-6)
+    # Ground plane: same 7 configs as env_pendulum_with_contact.py (CONTACT_CONFIG 0-6).
+    # Pendulum root is at y=2; if ground had rot_xyz=(0,0,0), ground would be at y=offset,
+    # so root-to-ground vertical distance would be (2 - offset) m.
     if CONTACT_CONFIG == 0:
         offset = -15.5
-        rot_xyz = np.array([0., 0., 0.])
+        rot_xyz = np.array([0., 0., 0.])  # pendulum won't touch the ground
     elif CONTACT_CONFIG == 1:
         offset = 0.0
-        rot_xyz = np.array([0., 0., 0.])
+        rot_xyz = np.array([0., 0., 0.])  # 2.0 m above ground
     elif CONTACT_CONFIG == 2:
         offset = 0.2
-        rot_xyz = np.array([np.pi / 8., np.pi / 16., np.pi / 16.])
+        rot_xyz = np.array([np.pi / 8., np.pi / 16., np.pi / 16.])  # 1.8 m above ground
     elif CONTACT_CONFIG == 3:
         offset = 0.5
-        rot_xyz = np.array([0., 0., 0.])
+        rot_xyz = np.array([0., 0., 0.])  # 1.5 m above ground
     elif CONTACT_CONFIG == 4:
         offset = -0.5
-        rot_xyz = np.array([0., 0., 0.])
+        rot_xyz = np.array([0., 0., 0.])  # 2.5 m above ground
     elif CONTACT_CONFIG == 5:
         offset = -0.3
-        rot_xyz = np.array([0., 0., 0.])
+        rot_xyz = np.array([0., 0., 0.])  # 2.3 m above ground
     elif CONTACT_CONFIG == 6:
-        offset = 0.0
-        rot_xyz = np.array([np.pi / 8., 0., 0.])
+        offset = 1.5
+        rot_xyz = np.array([0., 0., 0.])  # 0.5 m above ground
     else:
         raise ValueError(f"Invalid CONTACT_CONFIG: {CONTACT_CONFIG}. Use 0-6 (see env_pendulum_with_contact.py).")
     ground_rot = Rotation.from_euler('xyz', rot_xyz).as_quat()
@@ -245,9 +253,13 @@ if __name__ == '__main__':
     
     # Setup CSV files for logging state vectors and contact info
     csv_filename = Path(__file__).parent / 'pendulum_states_2.csv'
-    contact_csv_filename = Path(__file__).parent / 'pendulum_contact_inputs.csv'
+    contact_csv_filename = Path(__file__).parent / 'pendulum_nerdEnv_contacts.csv'
+    raw_contact_csv_filename = Path(__file__).parent / 'pendulum_nerdEnv_contacts_raw.csv'
+    root_body_q_csv_filename = Path(__file__).parent / 'pendulum_nerdEnv_root_body_q.csv'
     print(f"\nWriting state vectors to: {csv_filename}")
-    print(f"Writing contact info to: {contact_csv_filename}")
+    print(f"Writing contact info (processed) to: {contact_csv_filename}")
+    print(f"Writing raw contact info (world frame, no masking) to: {raw_contact_csv_filename}")
+    print(f"Writing root body pose (transform for contact_points_1) to: {root_body_q_csv_filename}")
     
     # Run simulation loop
     print(f"\nRunning simulation for {num_steps} steps...")
@@ -258,13 +270,19 @@ if __name__ == '__main__':
     
     try:
         for step in range(num_steps):
-            # Get model inputs (including contact info) before step so we log inputs used for this step
+            # Get raw contact info (world frame, mask from depth/threshold, no coordinate transform or zeroing)
+            raw_contact_inputs = neural_env.integrator_neural.get_raw_contact_inputs()
+            # Get model inputs (processed: coordinate transform, masking) before step so we log inputs used for this step
             model_inputs = neural_env.integrator_neural.get_neural_model_inputs()
             # Step forward with zero actions (passive motion)
             states = neural_env.step(zero_actions, env_mode='neural')
             # Write state vector and contact-related inputs to CSV files
             write_state_to_csv(csv_filename, step, states)
             write_contact_inputs_to_csv(contact_csv_filename, step, model_inputs)
+            write_contact_inputs_to_csv(raw_contact_csv_filename, step, raw_contact_inputs)
+            write_root_body_q_to_csv(
+                root_body_q_csv_filename, step, neural_env.integrator_neural.root_body_q
+            )
             
             # Render the simulation
             neural_env.render()
@@ -281,6 +299,8 @@ if __name__ == '__main__':
     
     print("Simulation completed.")
     print(f"State data saved to: {csv_filename}")
-    print(f"Contact data saved to: {contact_csv_filename}")
+    print(f"Contact data (processed) saved to: {contact_csv_filename}")
+    print(f"Raw contact data saved to: {raw_contact_csv_filename}")
+    print(f"Root body pose saved to: {root_body_q_csv_filename}")
     neural_env.close()
 

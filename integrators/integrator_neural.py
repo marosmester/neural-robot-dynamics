@@ -467,6 +467,18 @@ class NeuralIntegrator(Integrator):
             "contact_points_0": contact_points_0,
             "contact_points_1": contact_points_1
         }
+
+    def get_raw_contact_inputs(self):
+        """
+        Return contact inputs as they are after get_abstract_contacts (from Warp),
+        before any processing: world frame, mask from depth/threshold, no coordinate
+        transform, no zeroing of inactive contacts. Same keys/shapes as contact part
+        of model_inputs, with (num_envs, T=1, dim) for use with write_contact_inputs_to_csv.
+        """
+        raw = {}
+        for k, v in self.contacts.items():
+            raw[k] = v.unsqueeze(1)  # (num_envs, 1, dim)
+        return raw
     
     def process_neural_model_inputs(self, model_inputs):
         # convert frame

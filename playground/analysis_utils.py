@@ -364,6 +364,27 @@ def write_contact_inputs_to_csv(csv_filename, step, model_inputs, env_idx=0):
         csv_writer.writerow(row_data)
 
 
+def write_root_body_q_to_csv(csv_filename, step, root_body_q, env_idx=0):
+    """
+    Write root body pose (position + quaternion xyzw) to CSV.
+    root_body_q is the transformation used to convert contact_points_1 to root body frame.
+
+    Args:
+        csv_filename: Path to the CSV file
+        step: Current simulation step
+        root_body_q: Tensor of shape (num_envs, 7): position (x,y,z) at 0:3, quaternion (x,y,z,w) at 3:7
+        env_idx: Environment index to write (default 0).
+    """
+    mode = 'w' if step == 0 else 'a'
+    with open(csv_filename, mode, newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        if step == 0:
+            header = ['step', 'pos_x', 'pos_y', 'pos_z', 'quat_x', 'quat_y', 'quat_z', 'quat_w']
+            csv_writer.writerow(header)
+        row = root_body_q[env_idx, :].cpu().numpy().tolist()
+        csv_writer.writerow([step] + row)
+
+
 def plot_model_input_from_csv(csv_filename, keyword, num_steps, output_filename=None, format='pdf'):
     """
     Plot a specific model input from CSV file over time.

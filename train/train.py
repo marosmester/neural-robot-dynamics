@@ -37,7 +37,7 @@ def add_additional_params(parser):
 
 if __name__ == '__main__':
     args_list = ['--cfg', './cfg/Ant/transformer.yaml',
-                 '--logdir', '../../data/trained_models/Ant/test/']
+                 '--logdir', '../data/trained_models/Ant/test/']
 
     solve_argv_conflict(args_list)
 
